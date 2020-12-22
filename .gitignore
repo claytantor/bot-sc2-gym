@@ -108,3 +108,5 @@ keys/*
 
 .vscode/
 .vscode/*
+
+replays/
