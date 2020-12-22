@@ -5,10 +5,13 @@ import torch
 import gym
 import argparse
 
+from dotenv import load_dotenv, find_dotenv
+
 from envs.m2bpg import MoveToBeaconPygameEnv
 from envs.pysc2 import MoveToBeaconPySC2Env
 
-from agents import dqn
+from agents import dqn, dqn2
+
 from plot import plot_scores, show_screen, moving_average
 
 # if gpu is to be used
@@ -63,8 +66,10 @@ def env_factory(name):
     if(name == 'MoveToBeaconPygame'):
         env = MoveToBeaconPygameEnv(grid_size=8)
 
-    #MoveToBeaconPySC2Env
-    if(name == 'MoveToBeaconPySC2Env'):
+    elif(name == 'MoveToBeaconPySC2Env'):
+        # from absl import flags
+        # FLAGS = flags.FLAGS
+        # FLAGS(sys.argv)        
         env = MoveToBeaconPySC2Env()    
     else:
         env = gym.make(name)
@@ -79,6 +84,8 @@ def agent_factory(name, env):
     print("agent name:", name)
     if name == 'dqn.Agent':
         agent = dqn.Agent(env, optimizer_type="Adam")
+    elif name == 'dqn3.Agent':
+        agent = dqn2.Agent(env, optimizer_type="Adam")
 
     if agent==None:
         raise ValueError("no agent found")
@@ -87,26 +94,27 @@ def agent_factory(name, env):
 
 def main(argv): 
     # Read in command-line parameters
-    parser = argparse.ArgumentParser()
+    # parser = argparse.ArgumentParser()
 
-    parser.add_argument("-e", "--env", action="store", default="FrozenLake-v0", dest="env", help="environment")
+    # parser.add_argument("-e", "--env", action="store", default="FrozenLake-v0", dest="env", help="environment")
 
-    parser.add_argument("-i", "--episodes", action="store", default=30000, type=int, dest="episodes", help="episodes")
+    # parser.add_argument("-i", "--episodes", action="store", default=30000, type=int, dest="episodes", help="episodes")
 
-    parser.add_argument("-a", "--agent", action="store", default="dqn.Agent", dest="agent", help="agent")
+    # parser.add_argument("-a", "--agent", action="store", default="dqn.Agent", dest="agent", help="agent")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
     # env factory
-    env = env_factory(args.env)
-    agent = agent_factory(args.agent, env)
+    env = env_factory("MoveToBeaconPySC2Env")
+    agent = agent_factory("dqn2.Agent", env)
 
     print("Action space: ", env.action_space)
     print("Observation space: ", env.observation_space)
     
     t = Trainer(agent, env)
-    t.train(args.episodes)
+    t.train(100)
 
            
 if __name__ == "__main__":
+    load_dotenv(find_dotenv())
     main(sys.argv[1:])
