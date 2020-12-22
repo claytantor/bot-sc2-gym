@@ -137,7 +137,7 @@ class MoveToBeaconPySC2Env():
                         use_feature_units=True),
                     step_mul=16,
                     game_steps_per_episode=0,
-                    realtime=False,
+                    realtime=True,
                     save_replay_episodes=1,
                     replay_dir=replaysDir,
                     visualize=False) 
