@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/app
 
 COPY requirements.txt ./
-COPY ./adeptRL ./
-COPY ./sc2 ./
-
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install adeptRL[mpi,sc2,profiler]
 
+COPY sc2 /usr/src/app/sc2
+COPY envs /usr/src/app/envs
+COPY agents /usr/src/app/agents
 COPY *.py ./
+COPY .env ./
