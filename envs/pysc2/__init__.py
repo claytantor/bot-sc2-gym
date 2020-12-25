@@ -145,6 +145,8 @@ class MoveToBeaconPySC2Env():
         self.action_model = make_move_actions(self.screen, self.screen)
 
         self.timesteps = self._sc2env.reset()
+
+        self.state = self.make_state(self.timesteps[0])
   
 
     def reset(self):
@@ -165,13 +167,7 @@ class MoveToBeaconPySC2Env():
     def step(self, actions):
         timesteps = self._sc2env.step(actions)
         obs = timesteps[0]
-        # visibility_screen = obs.observation['feature_screen'][1]
 
-        # zeros for now but should be a 3d array of 
-        # screen = np.zeros((3, self.screen, self.screen))
-        # screen = obs.observation['feature_screen']
-        # screen = np.ascontiguousarray(screen, dtype=np.float32) / 1.0
-        # screen = torch.from_numpy(screen).to(device)
         self.state = self.make_state(obs)
 
         reward_tensor = torch.tensor(np.array([obs.reward]), dtype=torch.float64, device=device)
@@ -182,11 +178,10 @@ class MoveToBeaconPySC2Env():
         screen = obs.observation[name][dimension_name]
         screen = np.ascontiguousarray(screen, dtype=np.float32) / np.amax(screen)
         
-        # screen = torch.from_numpy(screen)
-        # return resize(screen).unsqueeze(0).to(device)
-
         screen = np.array([screen])
+        # screen = torch.from_numpy(screen).unsqueeze(0).to(device)
         screen = torch.from_numpy(screen).to(device)
+
         return screen
 
 

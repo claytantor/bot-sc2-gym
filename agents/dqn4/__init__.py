@@ -72,46 +72,7 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-class DQN2(nn.Module):
-
-
-
-    def __init__(self):
-        super(DQN2, self).__init__()
-
-        self.number_of_actions = 2
-        self.gamma = 0.99
-        self.final_epsilon = 0.0001
-        self.initial_epsilon = 0.1
-        self.number_of_iterations = 2000000
-        self.replay_memory_size = 10000
-        self.minibatch_size = 32
-
-        self.conv1 = nn.Conv2d(4, 32, 8, 4)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(32, 64, 4, 2)
-        self.relu2 = nn.ReLU(inplace=True)
-        self.conv3 = nn.Conv2d(64, 64, 3, 1)
-        self.relu3 = nn.ReLU(inplace=True)
-        self.fc4 = nn.Linear(3136, 512)
-        self.relu4 = nn.ReLU(inplace=True)
-        self.fc5 = nn.Linear(512, self.number_of_actions)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = self.relu1(out)
-        out = self.conv2(out)
-        out = self.relu2(out)
-        out = self.conv3(out)
-        out = self.relu3(out)
-        out = out.view(out.size()[0], -1)
-        out = self.fc4(out)
-        out = self.relu4(out)
-        out = self.fc5(out)
-
-        return out
-
-class DQN(nn.Module):
+class DQN3(nn.Module):
 # Layer	Input	    kernal 	    Stride	# filters	Activa	Output
 # conv1	96x96x1	    8x8	        4	    32	        ReLU	20x20x32
 # conv2	20x20x32	4x4	        2	    64	        ReLU	9x9x64
@@ -119,7 +80,7 @@ class DQN(nn.Module):
 # fc4	7x7x64		                    512	        ReLU	512
 # fc5	512			                    2	        Linear	2
     def __init__(self, h, w, outputs):
-        super(DQN, self).__init__()
+        super(DQN3, self).__init__()
 
         self.conv1 = nn.Conv2d(
             in_channels=1, out_channels=32, kernel_size=8, stride=4) 
@@ -131,28 +92,13 @@ class DQN(nn.Module):
             # output = torch.Size([1, 64, 10, 10])
         self.bn2 = nn.BatchNorm2d(64)
 
-        # self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
         self.conv3 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=3, stride=1) 
             # output = torch.Size([1, 64, 8, 8])
         self.bn3 = nn.BatchNorm2d(64)
 
-        # # Number of Linear input connections depends on output of conv2d layers
-        # # and therefore the input size, so compute it.
-        # def conv2d_size_out(size, kernel_size = 3, stride = 1):
-        #     return (size - (kernel_size - 1) - 1) // stride  + 1
-
-        # convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w)))
-        # convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h)))
-        # linear_input_size = convw * convh * 32
-        # self.head = nn.Linear(linear_input_size, outputs)
-
-
         self.fc4 = nn.Linear(4096, 512)
-        self.relu4 = nn.ReLU(inplace=True)
         self.fc5 = nn.Linear(512, outputs)
-
-
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -163,8 +109,7 @@ class DQN(nn.Module):
         x = F.relu(self.bn3(self.conv3(x)))
 
         x = x.view(x.size()[0], -1)
-        x = self.fc4(x)
-        x = self.relu4(x)
+        x = F.relu(self.fc4(x))
         x = self.fc5(x)
 
         return x
@@ -183,10 +128,10 @@ class TerranAgent(base_agent.BaseAgent):
         self.actions = env.get_actions()
         self.n_actions = len(self.actions)
 
-        _, screen_height, screen_width =env.observation_spec()[0].feature_screen
+        _, screen_height, screen_width = env.get_state().shape
 
-        self.policy_net = DQN(screen_height, screen_width, self.n_actions).to(device)
-        self.target_net = DQN(screen_height, screen_width, self.n_actions).to(device)
+        self.policy_net = DQN3(screen_height, screen_width, self.n_actions).to(device)
+        self.target_net = DQN3(screen_height, screen_width, self.n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -198,7 +143,7 @@ class TerranAgent(base_agent.BaseAgent):
         else:
             self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=self.learning_rate)
 
-        self.memory = ReplayMemory(10000)
+        self.memory = ReplayMemory(100000)
 
         self.setup(env.observation_spec(), env.action_spec())
 
@@ -228,12 +173,6 @@ class TerranAgent(base_agent.BaseAgent):
         self.memory.push(state, action, next_state, reward)
         self.optimize_model()
 
-
-    # def make_state(self, obs, name='feature_screen'):
-    #     screen = obs.observation[name]
-    #     screen = np.ascontiguousarray(screen, dtype=np.float32) / np.amax(screen)
-    #     return torch.from_numpy(screen).to(device)
-
     def step(self, obs):
         """
         use the observation and return an action
@@ -258,7 +197,6 @@ class TerranAgent(base_agent.BaseAgent):
             return tensor_action, actions.FUNCTIONS.select_point("select_all_type", (marine.x, marine.y))
         else:
             return tensor_action, action_model[0]['pysc2_action']
-
 
 
     def select_action_tensor(self, state):

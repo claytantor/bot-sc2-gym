@@ -10,9 +10,8 @@ import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
-
  
-from agents.dqn3 import TerranAgent
+from agents.dqn4 import TerranAgent
 from envs.pysc2 import MoveToBeaconPySC2Env
 
 from absl import flags
