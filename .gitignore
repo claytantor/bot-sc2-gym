@@ -110,3 +110,5 @@ keys/*
 .vscode/*
 
 replays/
+workspace/
+sc2/

@@ -1,0 +1,145 @@
+FROM nvidia/cudagl:10.1-devel-ubuntu18.04
+
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    GIT_CLONE="git clone --depth 10" && \
+    rm -rf /var/lib/apt/lists/* \
+           /etc/apt/sources.list.d/cuda.list \
+           /etc/apt/sources.list.d/nvidia-ml.list && \
+    apt-get update && \
+# ==================================================================
+# tools
+# ------------------------------------------------------------------
+    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        less \
+        openssh-server \
+        sudo \
+        systemd \
+        tmux \
+        unzip \
+        vim \
+        wget \
+        zsh && \
+# ==================================================================
+# useful developer tools
+# ------------------------------------------------------------------
+    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
+        software-properties-common \
+        && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
+        python3.6 \
+        python3.6-dev \
+        python3.6-tk \
+        python3-distutils \
+        cython \
+        libopenmpi-dev \
+        openmpi-bin \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        locales \
+        mesa-utils
+
+# ==================================================================
+# Python goodies
+# ------------------------------------------------------------------
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    GIT_CLONE="git clone --depth 10" && \
+    rm -rf /var/lib/apt/lists/* \
+           /etc/apt/sources.list.d/cuda.list \
+           /etc/apt/sources.list.d/nvidia-ml.list && \
+    apt-get update && \
+    wget -O ~/get-pip.py \
+        https://bootstrap.pypa.io/get-pip.py && \
+    python3.6 ~/get-pip.py && \
+    ln -s /usr/bin/python3.6 /usr/local/bin/python3 && \
+    ln -s /usr/bin/python3.6 /usr/local/bin/python && \
+    $PIP_INSTALL \
+        setuptools \
+        && \
+    $PIP_INSTALL \
+        black==19.10b0 \
+         tqdm==4.43.0
+
+# ==================================================================
+# cuDNN
+# ==================================================================
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    rm -rf /var/lib/apt/lists/* \
+           /etc/apt/sources.list.d/cuda.list \
+           /etc/apt/sources.list.d/nvidia-ml.list && \
+    apt-get update && \
+    mkdir -p /opt/cudnn7 && \
+    cd /opt/cudnn7/ && \
+    wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb && \
+    dpkg -i nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb && \
+    apt-get update && \
+    $APT_INSTALL libcudnn7-dev && \
+    ldconfig && \
+    apt-get clean && \
+    apt-get autoremove && \
+    rm -rf /var/lib/apt/lists/* /tmp/* ~/*
+
+# ==================================================================
+# OpenAI Gym
+# ------------------------------------------------------------------
+# Dependencies for OpenAI Gym
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    rm -rf /var/lib/apt/lists/* \
+           /etc/apt/sources.list.d/cuda.list \
+           /etc/apt/sources.list.d/nvidia-ml.list && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
+        ffmpeg \
+        libosmesa6-dev \
+        libsdl2-dev \
+        patchelf \
+        python-pyglet \
+        python3-opengl \
+        swig \
+        xvfb && \
+    $PIP_INSTALL \
+        atari-py==0.2.6 \
+        box2d==2.3.10 \
+        cffi==1.14.0 \
+        glfw==1.11.0 \
+        pybullet==2.7.2 \
+        gym==0.14.0
+
+# ==================================================================
+# matplotlib display dependencies
+# ------------------------------------------------------------------
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
+        tcl-dev \
+        tk-dev \
+        python-tk \
+        python3-tk && \
+    ln -fs /usr/share/zoneinfo/US/Eastern /etc/localtime && \
+    dpkg-reconfigure --frontend noninteractive tzdata && \
+    ldconfig && \
+    apt-get clean && \
+    apt-get autoremove && \
+    rm -rf /var/lib/apt/lists/* /tmp/* ~/*
+
+
+
+WORKDIR /usr/src/app
+
+COPY requirements.txt ./
+COPY ./adeptRL ./
+
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install adeptRL
+
+COPY *.py ./
+
