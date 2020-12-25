@@ -1,17 +1,18 @@
 import sys, os
 import numpy as np
+import uuid
+
 from absl import flags
-from io import StringIO
 from pathlib import Path
-from contextlib import closing
-from gym import utils
-from gym.envs.toy_text import discrete
 
 from pysc2.env import sc2_env
 from pysc2.lib import actions, features, units
 from pysc2.lib.actions import FUNCTIONS
 
-from agents.terran import TerranAgent
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
+from utils import logit
 
 import torch
 import torch.nn as nn
@@ -20,14 +21,16 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 from PIL import Image
 
-# if gpu is to be used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+pickleDir = os.path.join('/workspace','pickle')
 
-LEFT = 0
-DOWN = 1
-RIGHT = 2
-UP = 3
-
+device = torch.device("cpu")
+if int(os.getenv("USE_CUDA"))==1:
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # torch.backends.cudnn.enabled = False
+    torch.cuda.set_device(0)
+    torch.cuda.empty_cache()
+    
+logit("ENV USING {} DEVICE".format(str(device)))
 
 no_op=0
 move_camera=1
@@ -77,6 +80,12 @@ def make_move_actions_old(window_width, window_height):
 
     return actions_model
 
+def make_noop(tensor_index):
+    return {
+                'tensor_index': tensor_index,
+                'pysc2_action': actions.FUNCTIONS.no_op()
+            }
+
 def make_move_actions(window_width, window_height):
     actions_list = []
     grid_units_w = int(window_width/GRID_SIZE)
@@ -97,6 +106,8 @@ def make_move_actions(window_width, window_height):
             actions_list.append(actions_model)
             tensor_index += 1
 
+    # actions_list.append(make_noop(tensor_index))
+
     return actions_list
 
 
@@ -114,7 +125,9 @@ class MoveToBeaconPySC2Env():
         screen=96,
         minimap=64,
         step_mul=8,
-        obs_features=None):
+        obs_features=None,
+        realtime=False,
+        visualize=False):
 
 
         # fail-safe if executed not as absl app
@@ -137,10 +150,10 @@ class MoveToBeaconPySC2Env():
                         use_feature_units=True),
                     step_mul=16,
                     game_steps_per_episode=0,
-                    realtime=True,
-                    save_replay_episodes=1,
+                    realtime=realtime,
+                    save_replay_episodes=0,
                     replay_dir=replaysDir,
-                    visualize=False) 
+                    visualize=visualize) 
         
         self.action_model = make_move_actions(self.screen, self.screen)
 
@@ -162,36 +175,46 @@ class MoveToBeaconPySC2Env():
     def action_spec(self):
         return self._sc2env.action_spec()
 
+    def punish_value(self):
+        return torch.tensor(np.array([-1]), dtype=torch.float64, device=device)
+
     def step(self, actions):
         timesteps = self._sc2env.step(actions)
         obs = timesteps[0]
-        # visibility_screen = obs.observation['feature_screen'][1]
-
-        # zeros for now but should be a 3d array of 
-        # screen = np.zeros((3, self.screen, self.screen))
-        # screen = obs.observation['feature_screen']
-        # screen = np.ascontiguousarray(screen, dtype=np.float32) / 1.0
-        # screen = torch.from_numpy(screen).to(device)
         self.state = self.make_state(obs)
-
+        
+        # logit("step 1 before reward_tensor")
         reward_tensor = torch.tensor(np.array([obs.reward]), dtype=torch.float64, device=device)
+        # logit("step 2 after reward_tensor")
 
         return obs.last(), reward_tensor, timesteps
 
-    def make_state(self, obs, name='feature_screen', dimension_name='visibility_map'):
-        screen = obs.observation[name][dimension_name]
-        screen = np.ascontiguousarray(screen, dtype=np.float32) / np.amax(screen)
-        
-        # screen = torch.from_numpy(screen)
-        # return resize(screen).unsqueeze(0).to(device)
+    def make_state(self, obs, name='feature_screen', dimension_name='player_relative'):
 
+        # tid = str(uuid.uuid4()).replace('-','')[:8]        
+
+        # logit("make_state start {}".format(tid))
+        screen = obs.observation[name][dimension_name]
+        if np.amax(screen) > 0:
+            screen = np.ascontiguousarray(screen, dtype=np.float32) / np.amax(screen)
+        
         screen = np.array([screen])
-        screen = torch.from_numpy(screen).to(device)
+
+        # # save 
+        # pickleFile = os.path.join(pickleDir,'pysc2-{}'.format(tid))
+        # np.save(pickleFile, screen, allow_pickle=True, fix_imports=True)
+
+        # logit("make_state create device based tensor: {}".format(tid))
+        screen = torch.tensor(screen, dtype=torch.float32, device=device)
+        # logit("make_state ready to return: {}".format(tid))
         return screen
 
 
     def get_state(self):
         return self.state
+
+
+# python -c "import torch; torch.tensor(1).to('cuda:0')"
 
 
 

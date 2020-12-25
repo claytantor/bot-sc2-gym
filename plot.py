@@ -1,11 +1,12 @@
 import numpy as np
+import tkinter
 import matplotlib
 import matplotlib.pyplot as plt
 
-# set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
 if is_ipython:
     from IPython import display
+    matplotlib.use('TkAgg')
 
 
 def show_screen(screen, name):

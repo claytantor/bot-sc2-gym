@@ -1,27 +1,25 @@
 import sys, os
+import logging
 
-import matplotlib
-import matplotlib.pyplot as plt
-from collections import namedtuple
 from itertools import count
-from PIL import Image
-
+import uuid
+import argparse
+import time
 import sys
 import os
+
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
-
+from numpy.lib.twodim_base import tril_indices_from
+from plot import plot_scores, show_screen, moving_average
+from envcollect import get_pretty_env_info
  
 from agents.dqn3 import TerranAgent
 from envs.pysc2 import MoveToBeaconPySC2Env
 
-from absl import flags
+from utils import logit, writeline
 
-# set up matplotlib
-is_ipython = 'inline' in matplotlib.get_backend()
-if is_ipython:
-    from IPython import display
-
+tid = str(uuid.uuid4()).replace('-','')[:8]   
 
 BATCH_SIZE = 128
 GAMMA = 0.999
@@ -30,126 +28,110 @@ EPS_END = 0.05
 EPS_DECAY = 200
 TARGET_UPDATE = 10
 
-episode_durations = []
+success = []
+episodes_steps_list = []
+episode_scores = []
+
+# logger = logging.getLogger(__name__)
+# logging.basicConfig(filename='logs/{}.log'.format("sc2dnn"), level=logging.DEBUG)
 
 def main(argv):
-    print("starting sc2 bot app.")
 
     load_dotenv(find_dotenv())
+
+    logit(get_pretty_env_info())
+
+    print("loading starcraft from {}".format(os.getenv("SC2PATH")))
+
+    # Read in command-line parameters
+    parser = argparse.ArgumentParser()
+
+    # parser.add_argument("-e", "--env", action="store", default="FrozenLake-v0", dest="env", help="environment")
+
+    parser.add_argument("-i", "--episodes", action="store", default=5000, type=int, dest="episodes", help="episodes")
+
+    # parser.add_argument("-a", "--agent", action="store", default="dqn.Agent", dest="agent", help="agent")
+
+    args = parser.parse_args()
+    logit("EPISODES: {}".format(args.episodes))
 
     env = MoveToBeaconPySC2Env()
     agent = TerranAgent(env)
     agent.reset()
     
     try:
-        num_episodes = 50
+        num_episodes = args.episodes
         for i_episode in range(num_episodes):
-
-            print("i_episode", i_episode)
+            logit("i_episode: {}".format(i_episode))
             # Initialize the environment and state
             timesteps = env.reset()
             last_state = env.get_state()
             current_state = env.get_state()
             state = current_state - last_state
             done = timesteps[0].last()
-            reward = timesteps[0].reward
+
             for t in count():
-                
+
+                logit("A1")
                 step_action_tensor, step_action_pysc2 = agent.step(timesteps[0])
-
-
-                if timesteps[0].last():
-                    break
+                logit("A2")
+                # time.sleep(0.02)
 
                 # do the mapped action
-                done, reward, timesteps = env.step([step_action_pysc2])
+                done, reward_tensor, timesteps = env.step([step_action_pysc2])
+
+                logit("A3")
+                # time.sleep(0.02)
+                if reward_tensor.cpu().detach().numpy()[0] > 0.0:
+                    logit("==== goal.")
+                    success.append(1)
+                else:
+                    success.append(0)
+                logit("B")
+                # time.sleep(0.02)
 
                 # Observe new state
                 last_state = current_state
                 current_state = env.get_state()
+                logit("C")
+                # time.sleep(0.02) 
 
                 if not done:
                     next_state = current_state - last_state
                 else:
                     next_state = None
+                    score = timesteps[0].observation.score_cumulative['score']
+                    if score == 0:
+                        # negative reward done without score
+                        reward_tensor = env.punish_value() 
 
                 # Store the transition in memory
-                agent.push(state, step_action_tensor, next_state, reward)
+                logit("D")
+                time.sleep(0.02)
+                agent.push(state, step_action_tensor, next_state, reward_tensor)
+                logit("E")
+                time.sleep(0.02)
+                if done:
+                    break    
 
                 state = next_state
 
-
+                logit("F")
+                time.sleep(0.02)
+            
+            if i_episode % 10 == 0 and i_episode != 0:
+                logit("M 1")
+                success_val = sum(success[-1000:])
+                logit("===== success rate:{} episode:{}".format(success_val, i_episode))
+                episode_scores.append(float(success_val)) 
+                writeline('{},{}'.format(success_val, i_episode),'/workspace/train-sc2-{}.txt'.format(tid))
+                logit("M 2")
+                # plot_scores(episode_scores, "success rate/1K steps")
+            
+            logit("G")
 
     except KeyboardInterrupt:
         pass
-
-def get_screen():
-    pass
-
-def select_action(state):
-    pass
-
-def optimize_model():
-    pass
-
-target_net = None 
-policy_net = None 
-
-
-def main_old(argv):   
-
-    env=None
-    
-    try:
-
-        print("starting qlearning app.")
-        num_episodes = 50
-        for i_episode in range(num_episodes):
-            print("i_episode", i_episode)
-            # Initialize the environment and state
-            env.reset()
-            last_screen = get_screen()
-            current_screen = get_screen()
-            state = current_screen - last_screen
-
-            for t in count():
-                # Select and perform an action
-                action = select_action(state)
-                _, reward, done, _ = env.step(action.item())
-                # reward = torch.tensor([reward], device=device)
-
-                # Observe new state
-                last_screen = current_screen
-                #current_screen = get_screen()
-                current_screen = None
-                
-                if not done:
-                    next_state = current_screen - last_screen
-                else:
-                    next_state = None
-
-                # Store the transition in memory
-                # memory.push(state, action, next_state, reward)
-
-                # Move to the next state
-                state = next_state
-
-                # if t % np.random.randint(1,100) == 0 and state != None:
-                #     show_screen(state, "state render")
-
-                # Perform one step of the optimization (on the target network)
-                optimize_model()
-                if done:
-                    episode_durations.append(t + 1)
-                    # plot_durations()
-                    break
-
-            # Update the target network, copying all weights and biases in DQN
-            if i_episode % TARGET_UPDATE == 0:
-                target_net.load_state_dict(policy_net.state_dict())
-    
-    except KeyboardInterrupt:
-        print('exit')
 
 
 

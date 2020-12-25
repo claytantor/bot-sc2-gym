@@ -1,12 +1,16 @@
+import os, sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 import numpy as np
+from itertools import count
+
+from pathlib import Path
 
 # if gpu is to be used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class Network(nn.Module):
@@ -55,9 +59,49 @@ class Network(nn.Module):
 
 nn_network = Network()
 
-view_dim = np.array([np.zeros((96, 96))])
-# print(view_dim.shape)
+pickleDir = os.path.join(Path(__file__).parent.absolute(),'pickle')
 
-screen = torch.tensor(view_dim, dtype=torch.float32, device=device)
-out = nn_network.forward(screen)
-print(out.shape)
+# eb02ece5 works
+# 52d7e33d freeze
+
+def save_array(pickleFile, array):
+    np.save(pickleFile, array, allow_pickle=True, fix_imports=True)
+
+def load_array(pickleFile):
+    return np.load(pickleFile)
+
+def show_array(array):
+    np.set_printoptions(threshold=sys.maxsize)
+    print(array)
+
+def run_pickle_gen():
+
+    for t in count():
+        pickleFile = os.path.join(pickleDir,'tt-{}'.format(t)) 
+
+        screen = np.random.rand(1, 96, 96)
+        screen = np.ascontiguousarray(screen, dtype=np.float32) / np.amax(screen)
+        screen = np.array([screen])
+
+        if t % 1000 == 0 and t != 0:
+            save_array(pickleFile, screen)
+
+        screen = torch.tensor(screen, device=torch.device("cuda:0"))
+        print(t, screen)
+
+def main(argv):
+    items = ['eb02ece5','52d7e33d']
+    for item in items:
+        print('========= item {}'.format(item))
+        pickleFile = os.path.join(pickleDir,'pysc2-{}.npy'.format(item))
+        arrayval = load_array(pickleFile)
+        show_array(arrayval)
+
+        arrayval = torch.tensor(arrayval, device=torch.device("cuda:0"))
+        print("converted {} to tensor.".format(arrayval))
+
+
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

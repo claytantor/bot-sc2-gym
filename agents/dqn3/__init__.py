@@ -1,36 +1,8 @@
-import math
-import numpy as np
+import sys, os
 
-from gym import error, spaces
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-from torch.optim.lr_scheduler import StepLR
-from torch.autograd import Variable
-
-import sys
-import os
-from dotenv import load_dotenv, find_dotenv
-
-
-from pysc2.agents import base_agent
-from pysc2.env import sc2_env
-from pysc2.lib import actions, features, units
-from absl import app
-
-import random
-
-import gym
 import math
 import random
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
-from collections import namedtuple
-from itertools import count
-from PIL import Image
 
 import torch
 import torch.nn as nn
@@ -38,18 +10,39 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 
-# if gpu is to be used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+from pysc2.agents import base_agent
+from pysc2.lib import actions, features, units
+from collections import namedtuple
+from utils import logit
+
+from pathlib import Path
+
+pickleDir = os.path.join(Path(__file__).parent.absolute(),'pickle')
+
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv()) 
+
+
+device = torch.device("cpu")
+if int(os.getenv("USE_CUDA"))==1:
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # torch.backends.cudnn.enabled = False
+    torch.cuda.set_device(0)
+    torch.cuda.empty_cache()
+    
+logit("AGENT USING {} DEVICE".format(str(device)))
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 GAMMA = 0.999
 EPS_START = 0.9
-EPS_END = 0.05
+EPS_END = 0.1
 EPS_DECAY = 200
-TARGET_UPDATE = 10
+TARGET_UPDATE = 100
 
 class ReplayMemory(object):
 
@@ -71,45 +64,6 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-
-class DQN2(nn.Module):
-
-
-
-    def __init__(self):
-        super(DQN2, self).__init__()
-
-        self.number_of_actions = 2
-        self.gamma = 0.99
-        self.final_epsilon = 0.0001
-        self.initial_epsilon = 0.1
-        self.number_of_iterations = 2000000
-        self.replay_memory_size = 10000
-        self.minibatch_size = 32
-
-        self.conv1 = nn.Conv2d(4, 32, 8, 4)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(32, 64, 4, 2)
-        self.relu2 = nn.ReLU(inplace=True)
-        self.conv3 = nn.Conv2d(64, 64, 3, 1)
-        self.relu3 = nn.ReLU(inplace=True)
-        self.fc4 = nn.Linear(3136, 512)
-        self.relu4 = nn.ReLU(inplace=True)
-        self.fc5 = nn.Linear(512, self.number_of_actions)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = self.relu1(out)
-        out = self.conv2(out)
-        out = self.relu2(out)
-        out = self.conv3(out)
-        out = self.relu3(out)
-        out = out.view(out.size()[0], -1)
-        out = self.fc4(out)
-        out = self.relu4(out)
-        out = self.fc5(out)
-
-        return out
 
 class DQN(nn.Module):
 # Layer	Input	    kernal 	    Stride	# filters	Activa	Output
@@ -137,17 +91,6 @@ class DQN(nn.Module):
             # output = torch.Size([1, 64, 8, 8])
         self.bn3 = nn.BatchNorm2d(64)
 
-        # # Number of Linear input connections depends on output of conv2d layers
-        # # and therefore the input size, so compute it.
-        # def conv2d_size_out(size, kernel_size = 3, stride = 1):
-        #     return (size - (kernel_size - 1) - 1) // stride  + 1
-
-        # convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w)))
-        # convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h)))
-        # linear_input_size = convw * convh * 32
-        # self.head = nn.Linear(linear_input_size, outputs)
-
-
         self.fc4 = nn.Linear(4096, 512)
         self.relu4 = nn.ReLU(inplace=True)
         self.fc5 = nn.Linear(512, outputs)
@@ -172,11 +115,14 @@ class DQN(nn.Module):
 
 
 class TerranAgent(base_agent.BaseAgent):
-    def __init__(self, env, optimizer_type = 'Adam'):
+    def __init__(self, env, 
+        optimizer_type = 'Adam'
+        ):
+
         super(TerranAgent, self).__init__()
 
         self._env = env
-        self.learning_rate = 0.001
+        self.learning_rate = 0.01
         self.momentum = 0.9
         self.gamma = 0.9
         self.lr_step=100
@@ -199,7 +145,7 @@ class TerranAgent(base_agent.BaseAgent):
         else:
             self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=self.learning_rate)
 
-        self.memory = ReplayMemory(10000)
+        self.memory = ReplayMemory(100000)
 
         self.setup(env.observation_spec(), env.action_spec())
 
@@ -226,14 +172,12 @@ class TerranAgent(base_agent.BaseAgent):
         return action in obs.observation.available_actions
 
     def push(self, state, action, next_state, reward):
+        logit("A push1")
         self.memory.push(state, action, next_state, reward)
+        logit("A push2")
         self.optimize_model()
+        logit("A push3")
 
-
-    # def make_state(self, obs, name='feature_screen'):
-    #     screen = obs.observation[name]
-    #     screen = np.ascontiguousarray(screen, dtype=np.float32) / np.amax(screen)
-    #     return torch.from_numpy(screen).to(device)
 
     def step(self, obs):
         """
@@ -261,7 +205,6 @@ class TerranAgent(base_agent.BaseAgent):
             return tensor_action, action_model[0]['pysc2_action']
 
 
-
     def select_action_tensor(self, state):
         sample = random.random()
         eps_threshold = EPS_END + (EPS_START - EPS_END) * \
@@ -281,38 +224,59 @@ class TerranAgent(base_agent.BaseAgent):
     def optimize_model(self):
         if len(self.memory) < BATCH_SIZE:
             return
+
+        logit("A optimize_model 1")
         transitions = self.memory.sample(BATCH_SIZE)
         batch = Transition(*zip(*transitions))
-
+        logit("A optimize_model 2")
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                             batch.next_state)), device=device, dtype=torch.bool)
+
         non_final_next_states = torch.cat([s for s in batch.next_state
                                                     if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
 
+        logit("A optimize_model 3")
+
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
-        # Compute V(s_{t+1}) for all next states.
+        logit("A optimize_model 4")
+
+        # Compute V(s_{t+1}) for all next states. This looks like a markov 
         next_state_values = torch.zeros(BATCH_SIZE, device=device)
+        logit("A optimize_model 4A")
         next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
+        # next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
+        logit("A optimize_model 5")
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
+
+
         # # Compute Huber loss
         loss = F.smooth_l1_loss(state_action_values.float(), expected_state_action_values.unsqueeze(1).float())
+        logit("A optimize_model 6")
         # criterion = nn.MSELoss()
         # loss = criterion(state_action_values.float(), expected_state_action_values.unsqueeze(1).float())
+        logit("A optimize_model 7") 
 
         # Optimize the model
         self.optimizer.zero_grad()
+        logit("A optimize_model 7a") 
         loss.backward(retain_graph=True)
+        logit("A optimize_model 7b") 
         for param in self.policy_net.parameters():
+            logit("A optimize_model 7c param:{}".format(param)) 
             param.grad.data.clamp_(-1, 1)
+
+        logit("A optimize_model 8")
+
         self.optimizer.step()
 
+        logit("A optimize_model 9")
     
     def first(self, obs):
         if obs.first():
