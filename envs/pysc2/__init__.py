@@ -21,7 +21,7 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 from PIL import Image
 
-pickleDir = os.path.join('/workspace','pickle')
+pickleDir = os.path.join('/workspace', 'pickle')
 
 device = torch.device("cpu")
 if int(os.getenv("USE_CUDA"))==1:
@@ -158,8 +158,8 @@ class MoveToBeaconPySC2Env():
         self.action_model = make_move_actions(self.screen, self.screen)
 
         self.timesteps = self._sc2env.reset()
+        self.state = self.make_state(self.timesteps[0])
   
-
     def reset(self):
         timesteps = self._sc2env.reset()
         obs = timesteps[0]

@@ -14,7 +14,7 @@ from numpy.lib.twodim_base import tril_indices_from
 from plot import plot_scores, show_screen, moving_average
 from envcollect import get_pretty_env_info
  
-from agents.dqn3 import TerranAgent
+from agents.dqn4 import TerranAgent
 from envs.pysc2 import MoveToBeaconPySC2Env
 
 from utils import logit, writeline
